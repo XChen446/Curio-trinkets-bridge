@@ -28,8 +28,11 @@ import top.theillusivec4.curios.common.network.client.CPacketToggleRender;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * 使用 Accessories 风格绘制 Curios/Trinkets 的统一饰品界面。
@@ -38,11 +41,13 @@ import java.util.Locale;
 public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends AbstractContainerScreen<T> {
 
     private static final ResourceLocation INVENTORY_TEXTURE = ResourceLocation.withDefaultNamespace("textures/gui/container/inventory.png");
+    private static final ResourceLocation COSMETIC_ICON_TEXTURE = ResourceLocation.fromNamespaceAndPath("curios", "textures/slot/empty_cosmetic_slot.png");
     private static final int PANEL_PADDING = 7;
     private static final int BUTTON_SIZE = 12;
 
     private float legacyScroll;
     private boolean legacyDragging;
+    private final Map<String, Optional<ResourceLocation>> slotIconCache = new HashMap<>();
 
     protected UnifiedCuriosScreen(T menu, Inventory inventory, Component title) {
         super(menu, inventory, Component.translatable("screen.curio_trinkets_bridge.unified_accessories"));
@@ -68,6 +73,7 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         this.renderBackground(guiGraphics);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
+        this.renderBorrowedSlotIcons(guiGraphics);
         this.renderControls(guiGraphics, mouseX, mouseY);
         this.renderTooltip(guiGraphics, mouseX, mouseY);
         this.renderBridgeTooltip(guiGraphics, mouseX, mouseY);
@@ -183,11 +189,23 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
             int x = this.leftPos + slot.x - 1;
             int y = this.topPos + slot.y - 1;
             int outer = curioSlot instanceof CosmeticCurioSlot || curioSlot.isCosmetic() ? 0xFF8A6A96 : 0xFF7E8172;
-            guiGraphics.fill(x, y, x + 18, y + 18, outer);
-            guiGraphics.fill(x + 1, y + 1, x + 17, y + 17, 0xFF2D2F34);
+            this.drawAccessoriesSlotBack(guiGraphics, x, y, outer);
         }
 
         this.renderScroll(guiGraphics, panelX, panelY, panelWidth, panelHeight, bounds);
+    }
+
+    private void renderBorrowedSlotIcons(GuiGraphics guiGraphics) {
+        for (Slot slot : this.menu.slots) {
+            if (!(slot instanceof CurioSlot curioSlot) || !slot.isActive() || slot.hasItem()) continue;
+
+            Optional<ResourceLocation> icon = this.slotIconTexture(curioSlot);
+            if (icon.isEmpty()) continue;
+
+            int x = this.leftPos + slot.x + 1;
+            int y = this.topPos + slot.y + 1;
+            guiGraphics.blit(icon.get(), x, y, 0, 0, 16, 16, 16, 16);
+        }
     }
 
     private void renderControls(GuiGraphics guiGraphics, int mouseX, int mouseY) {
@@ -226,17 +244,53 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
         if (this.hoveredSlot instanceof CurioSlot curioSlot && !this.hoveredSlot.hasItem()) {
             LocalPlayer player = Minecraft.getInstance().player;
             if (player != null && player.inventoryMenu.getCarried().isEmpty()) {
-                guiGraphics.renderTooltip(this.font, this.slotDisplayName(curioSlot), mouseX, mouseY);
+                guiGraphics.renderTooltip(this.font, this.slotTooltip(curioSlot), Optional.empty(), mouseX, mouseY);
             }
         }
     }
 
-    private Component slotDisplayName(CurioSlot curioSlot) {
-        Component base = this.baseSlotDisplayName(curioSlot.getIdentifier());
+    private List<Component> slotTooltip(CurioSlot curioSlot) {
+        Component slotName = this.baseSlotDisplayName(curioSlot.getIdentifier());
         if (curioSlot instanceof CosmeticCurioSlot || curioSlot.isCosmetic()) {
-            return Component.translatable("curios.cosmetic").append(" ").append(base);
+            return List.of(Component.translatable("tooltip.curio_trinkets_bridge.cosmetic_slot", slotName));
         }
-        return base;
+        return List.of(Component.translatable("tooltip.curio_trinkets_bridge.accessory_slot", slotName));
+    }
+
+    private Optional<ResourceLocation> slotIconTexture(CurioSlot curioSlot) {
+        String cacheKey = curioSlot.getIdentifier() + (curioSlot instanceof CosmeticCurioSlot || curioSlot.isCosmetic() ? "#cosmetic" : "#base");
+        return this.slotIconCache.computeIfAbsent(cacheKey, key -> this.resolveSlotIconTexture(curioSlot));
+    }
+
+    private Optional<ResourceLocation> resolveSlotIconTexture(CurioSlot curioSlot) {
+        if (curioSlot instanceof CosmeticCurioSlot || curioSlot.isCosmetic()) {
+            return existingTexture(COSMETIC_ICON_TEXTURE);
+        }
+
+        TrinketSlotDiscovery.DiscoveredSlot trinketSlot = this.discoveredTrinketSlot(curioSlot.getIdentifier());
+        if (trinketSlot != null && trinketSlot.icon() != null && !trinketSlot.icon().isBlank()) {
+            ResourceLocation trinketIcon = ResourceLocation.tryParse(trinketSlot.icon());
+            if (trinketIcon != null) {
+                Optional<ResourceLocation> texture = existingTexture(iconToTexture(trinketIcon));
+                if (texture.isPresent()) return texture;
+            }
+        }
+
+        if (this.minecraft == null || this.minecraft.level == null) return Optional.empty();
+        return CuriosApi.getSlot(curioSlot.getIdentifier(), this.minecraft.level)
+                .map(slotType -> iconToTexture(slotType.getIcon()))
+                .flatMap(UnifiedCuriosScreen::existingTexture);
+    }
+
+    private static ResourceLocation iconToTexture(ResourceLocation icon) {
+        String path = icon.getPath();
+        if (!path.startsWith("textures/")) path = "textures/" + path;
+        if (!path.endsWith(".png")) path = path + ".png";
+        return ResourceLocation.fromNamespaceAndPath(icon.getNamespace(), path);
+    }
+
+    private static Optional<ResourceLocation> existingTexture(ResourceLocation texture) {
+        return Minecraft.getInstance().getResourceManager().getResource(texture).map(resource -> texture);
     }
 
     private Component baseSlotDisplayName(String identifier) {
@@ -323,6 +377,15 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
         guiGraphics.fill(x, y, x + BUTTON_SIZE, y + BUTTON_SIZE, hovered ? 0xFFFFFFFF : 0xFF202226);
         guiGraphics.fill(x + 1, y + 1, x + BUTTON_SIZE - 1, y + BUTTON_SIZE - 1, hovered ? 0xFF6D7568 : 0xFF4F564E);
         guiGraphics.drawCenteredString(this.font, label, x + BUTTON_SIZE / 2, y + 2, 0xFFE8E8E8);
+    }
+
+    private void drawAccessoriesSlotBack(GuiGraphics guiGraphics, int x, int y, int accent) {
+        guiGraphics.fill(x, y, x + 18, y + 18, 0xFF14161A);
+        guiGraphics.fill(x + 1, y + 1, x + 17, y + 17, accent);
+        guiGraphics.fill(x + 2, y + 2, x + 16, y + 16, 0xFF2D3036);
+        guiGraphics.fill(x + 3, y + 3, x + 15, y + 15, 0xFF1D2025);
+        guiGraphics.fill(x + 3, y + 3, x + 15, y + 4, 0x663F444C);
+        guiGraphics.fill(x + 3, y + 14, x + 15, y + 15, 0xAA111317);
     }
 
     private void renderScroll(GuiGraphics guiGraphics, int panelX, int panelY, int panelWidth, int panelHeight, CurioBounds bounds) {

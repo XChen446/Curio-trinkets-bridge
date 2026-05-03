@@ -32,12 +32,12 @@ public final class ClientBridgeSetup {
     private ClientBridgeSetup() {}
 
     public static void onClientSetup(FMLClientSetupEvent event) {
-        if (!TrinketDetector.isTrinketsLoaded()) return;
-
         event.enqueueWork(() -> {
             replaceScreen(CuriosRegistry.CURIO_MENU.get(), UnifiedCuriosScreen.Legacy::new);
             replaceScreen(CuriosRegistry.CURIO_MENU_NEW.get(), UnifiedCuriosScreen.Revamp::new);
             CurioTrinketBridge.LOGGER.info("[CurioTrinketBridge] 已接管 Curios 原生 UI，使用内置统一饰品界面");
+
+            if (!TrinketDetector.isTrinketsLoaded()) return;
 
             int registered = 0;
             for (Item item : BuiltInRegistries.ITEM) {

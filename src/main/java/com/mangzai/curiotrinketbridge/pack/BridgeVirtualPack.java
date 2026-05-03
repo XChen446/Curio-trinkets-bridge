@@ -50,9 +50,16 @@ public final class BridgeVirtualPack implements PackResources {
     private void generate() {
         Map<String, TrinketSlotDiscovery.DiscoveredSlot> discovered = TrinketSlotDiscovery.getOrScan();
         Map<String, String> defaults = SlotMapper.DEFAULT_SLOT_MAP;
-        Map<String, String> nameFallback = SlotMapper.SLOT_NAME_FALLBACK;
         int generated = 0;
         java.util.LinkedHashSet<String> generatedSlotIds = new java.util.LinkedHashSet<>();
+
+        for (String slotId : new java.util.LinkedHashSet<>(defaults.values())) {
+            byte[] payload = buildValidatorPatchJson();
+            ResourceLocation loc = ResourceLocation.fromNamespaceAndPath("curios", "curios/slots/" + slotId + ".json");
+            dataEntries.put(loc, payload);
+            dataNamespaces.add(loc.getNamespace());
+        }
+
         for (TrinketSlotDiscovery.DiscoveredSlot slot : discovered.values()) {
             // 1) 已被默认映射覆盖到既有 Curios 槽位的，跳过生成
             if (defaults.containsKey(slot.trinketSlotId())) continue;
@@ -91,6 +98,14 @@ public final class BridgeVirtualPack implements PackResources {
         JsonArray slots = new JsonArray();
         for (String id : slotIds) slots.add(id);
         json.add("slots", slots);
+        return GSON.toJson(json).getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static byte[] buildValidatorPatchJson() {
+        JsonObject json = new JsonObject();
+        JsonArray validators = new JsonArray();
+        validators.add(CurioTrinketBridge.MOD_ID + ":trinket_tag");
+        json.add("validators", validators);
         return GSON.toJson(json).getBytes(StandardCharsets.UTF_8);
     }
 
