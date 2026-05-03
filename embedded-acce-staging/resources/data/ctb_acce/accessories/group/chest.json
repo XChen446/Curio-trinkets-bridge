@@ -1,0 +1,10 @@
+﻿{
+  "replace": false,
+  "order": 80,
+  "slots": [
+    "necklace",
+    "cape",
+    "back"
+  ],
+  "icon": "ctb_acce:gui/group/chest"
+}

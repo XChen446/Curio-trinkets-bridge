@@ -1,0 +1,11 @@
+﻿{
+  "replace": false,
+  "amount": 1,
+  "operation": "set",
+  "order": 1000,
+  "icon": "ctb_acce:gui/slot/hat",
+  "validators": [
+    "ctb_acce:tag",
+    "ctb_acce:component"
+  ]
+}

@@ -1,0 +1,11 @@
+﻿{
+  "replace": false,
+  "amount": 2,
+  "operation": "set",
+  "order": 800,
+  "icon": "ctb_acce:gui/slot/ring",
+  "validators": [
+    "ctb_acce:tag",
+    "ctb_acce:component"
+  ]
+}

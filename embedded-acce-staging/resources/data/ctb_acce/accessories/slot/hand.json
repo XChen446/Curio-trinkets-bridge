@@ -1,0 +1,11 @@
+﻿{
+  "replace": false,
+  "amount": 2,
+  "operation": "set",
+  "order": 900,
+  "icon": "ctb_acce:gui/slot/hand",
+  "validators": [
+    "ctb_acce:tag",
+    "ctb_acce:component"
+  ]
+}

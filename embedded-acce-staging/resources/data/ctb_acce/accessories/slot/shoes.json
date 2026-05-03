@@ -1,0 +1,11 @@
+﻿{
+  "replace": false,
+  "amount": 1,
+  "operation": "set",
+  "order": 900,
+  "icon": "ctb_acce:gui/slot/shoes",
+  "validators": [
+    "ctb_acce:tag",
+    "ctb_acce:component"
+  ]
+}

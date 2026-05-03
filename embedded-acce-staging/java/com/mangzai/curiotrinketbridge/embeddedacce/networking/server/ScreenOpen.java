@@ -1,0 +1,58 @@
+﻿package com.mangzai.curiotrinketbridge.embeddedacce.networking.server;
+
+import com.mangzai.curiotrinketbridge.embeddedacce.Accessories;
+import com.mangzai.curiotrinketbridge.embeddedacce.networking.BaseAccessoriesPacket;
+import io.wispforest.endec.Endec;
+import io.wispforest.endec.impl.StructEndecBuilder;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.item.ItemStack;
+import org.jetbrains.annotations.Nullable;
+
+public record ScreenOpen(int entityId, boolean targetLookEntity) implements BaseAccessoriesPacket {
+
+    public static final Endec<ScreenOpen> ENDEC = StructEndecBuilder.of(
+            Endec.VAR_INT.fieldOf("entityId", ScreenOpen::entityId),
+            Endec.BOOLEAN.fieldOf("targetLookEntity", ScreenOpen::targetLookEntity),
+            ScreenOpen::new
+    );
+
+    public static ScreenOpen of(@Nullable LivingEntity livingEntity){
+        return new ScreenOpen(livingEntity != null ? livingEntity.getId() : -1, false);
+    }
+
+    public static ScreenOpen of(boolean targetLookEntity){
+        return new ScreenOpen(-1, targetLookEntity);
+    }
+
+    @Override
+    public void handle(Player player) {
+        LivingEntity livingEntity = null;
+
+        if(this.entityId != -1) {
+            var entity = player.level().getEntity(this.entityId);
+
+            if(entity instanceof LivingEntity living) livingEntity = living;
+        } else if(this.targetLookEntity) {
+            Accessories.attemptOpenScreenPlayer((ServerPlayer) player);
+
+            return;
+        }
+
+        ItemStack carriedStack = null;
+
+        var oldMenu = player.containerMenu;
+
+        var currentCarriedStack = oldMenu.getCarried();
+
+        if(!currentCarriedStack.isEmpty()) {
+            carriedStack = currentCarriedStack;
+
+            oldMenu.setCarried(ItemStack.EMPTY);
+        }
+
+        Accessories.openAccessoriesMenu(player, livingEntity, carriedStack);
+    }
+}

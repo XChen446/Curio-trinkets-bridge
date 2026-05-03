@@ -1,0 +1,58 @@
+﻿package com.mangzai.curiotrinketbridge.embeddedacce.mixin.client;
+
+import com.mangzai.curiotrinketbridge.embeddedacce.Accessories;
+import com.mangzai.curiotrinketbridge.embeddedacce.AccessoriesInternals;
+import com.mangzai.curiotrinketbridge.embeddedacce.client.AccessoriesClient;
+import com.mangzai.curiotrinketbridge.embeddedacce.client.gui.AccessoriesScreen;
+import com.mangzai.curiotrinketbridge.embeddedacce.networking.server.ScreenOpen;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.screens.inventory.EffectRenderingInventoryScreen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.InventoryMenu;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+@Mixin(InventoryScreen.class)
+public abstract class InventoryScreenMixin extends EffectRenderingInventoryScreen<InventoryMenu> {
+
+    public InventoryScreenMixin(InventoryMenu menu, Inventory playerInventory, Component title) {
+        super(menu, playerInventory, title);
+    }
+
+    @Unique
+    private Button accessoryButton = null;
+
+    @Inject(method = "init", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screens/inventory/InventoryScreen;addRenderableWidget(Lnet/minecraft/client/gui/components/events/GuiEventListener;)Lnet/minecraft/client/gui/components/events/GuiEventListener;"))
+    private void injectAccessoryButton(CallbackInfo ci){
+        var xOffset = Accessories.getConfig().clientData.inventoryButtonXOffset;
+        var yOffset = Accessories.getConfig().clientData.inventoryButtonYOffset;
+
+        accessoryButton = this.addRenderableWidget(
+                Button.builder(Component.empty(), button -> {
+                    AccessoriesClient.attemptToOpenScreen();
+                }).bounds(this.leftPos + xOffset, this.topPos + yOffset, 8, 8)
+                        .tooltip(Tooltip.create(Component.translatable(Accessories.translation("open.screen"))))
+                        .build()
+        ).adjustRendering((button, guiGraphics, sprite, x, y, width, height) -> {
+            guiGraphics.blit(AccessoriesScreen.SPRITES_8X8.getLocation(button), x, y, width, height, 8, 8, 8, 8);
+
+            return true;
+        });
+    }
+
+    @Inject(method = "method_19891", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/components/Button;setPosition(II)V"))
+    private void adjustAccessoryButton(CallbackInfo ci){
+        if(this.accessoryButton == null) return;
+
+        var xOffset = Accessories.getConfig().clientData.inventoryButtonXOffset;
+        var yOffset = Accessories.getConfig().clientData.inventoryButtonYOffset;
+
+        accessoryButton.setPosition(this.leftPos + xOffset, this.topPos + yOffset);
+    }
+}
