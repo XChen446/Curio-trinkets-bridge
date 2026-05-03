@@ -5,7 +5,6 @@ import com.mangzai.curiotrinketbridge.bridge.TrinketDetector;
 import com.mangzai.curiotrinketbridge.bridge.TrinketSlotResolver;
 import com.mangzai.curiotrinketbridge.event.BridgeEventHandler;
 import com.mangzai.curiotrinketbridge.event.TooltipEventHandler;
-import com.mangzai.curiotrinketbridge.menu.BridgeMenus;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -22,7 +21,8 @@ import top.theillusivec4.curios.api.CuriosApi;
 
 /**
  * Curio Trinkets Bridge 主入口。
- * 自动将 Trinkets (Fabric) 饰品桥接至 Curios (Forge)，并注册桥接包内置的 Accessories 风格菜单。
+ * 自动将 Trinkets (Fabric) 饰品桥接至 Curios (Forge)。
+ * UI 由 Curios（或后续内嵌的 Accessories 渲染层）负责，本类只完成桥接注册。
  */
 @Mod(CurioTrinketBridge.MOD_ID)
 public class CurioTrinketBridge {
@@ -34,7 +34,6 @@ public class CurioTrinketBridge {
     public CurioTrinketBridge() {
         var modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
         modEventBus.addListener(this::onCommonSetup);
-        BridgeMenus.register(modEventBus);
         // 注册自动槽位生成数据包提供者（必须挂在 mod 事件总线上，AddPackFindersEvent 在那里触发）
         modEventBus.register(com.mangzai.curiotrinketbridge.pack.BridgePackProvider.class);
         MinecraftForge.EVENT_BUS.register(BridgeEventHandler.class);

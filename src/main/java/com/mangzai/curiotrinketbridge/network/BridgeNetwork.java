@@ -37,13 +37,6 @@ public final class BridgeNetwork {
                 SlotMappingSyncPacket::decode,
                 SlotMappingSyncPacket::handle
         );
-            CHANNEL.registerMessage(
-                id++,
-                EmbeddedMenuActionPacket.class,
-                EmbeddedMenuActionPacket::encode,
-                EmbeddedMenuActionPacket::decode,
-                EmbeddedMenuActionPacket::handle
-            );
     }
 
     /** 发送当前 SlotMapper 给指定玩家。 */

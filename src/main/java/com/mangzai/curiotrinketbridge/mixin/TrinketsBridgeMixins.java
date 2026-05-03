@@ -41,22 +41,6 @@ public final class TrinketsBridgeMixins {
     private TrinketsBridgeMixins() {}
 
     /**
-     * 把 Curios 的打开入口重定向到桥接包内置的 Accessories 菜单。
-     * 原 Curios 菜单不再参与 UI 组织，只保留 Curios 的能力、槽位存储和物品行为。
-     */
-    @Mixin(value = top.theillusivec4.curios.common.inventory.container.CuriosContainerProvider.class, remap = false)
-    public static abstract class CuriosContainerProviderMixin {
-
-        @Inject(method = "createMenu", at = @At("RETURN"), cancellable = true, require = 0)
-        private void cti$useAccessoriesStyleMenu(int id,
-                                                 net.minecraft.world.entity.player.Inventory inventory,
-                                                 net.minecraft.world.entity.player.Player player,
-                                                 CallbackInfoReturnable<net.minecraft.world.inventory.AbstractContainerMenu> cir) {
-            cir.setReturnValue(new com.mangzai.curiotrinketbridge.menu.EmbeddedAccessoriesMenu(id, inventory));
-        }
-    }
-
-    /**
         * 旧方案保留：禁用 Trinkets API 的核心组件访问。
         *
         * <p>当前 mixins.json 不注册此 mixin，因为通用兼容需要其它模组仍能拿到 TrinketComponent，
