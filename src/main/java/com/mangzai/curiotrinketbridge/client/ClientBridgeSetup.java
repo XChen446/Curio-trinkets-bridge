@@ -3,6 +3,7 @@ package com.mangzai.curiotrinketbridge.client;
 import com.mangzai.curiotrinketbridge.CurioTrinketBridge;
 import com.mangzai.curiotrinketbridge.bridge.TrinketDetector;
 import com.mangzai.curiotrinketbridge.client.gui.UnifiedCuriosScreen;
+import com.mangzai.curiotrinketbridge.menu.BridgeMenus;
 import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.MenuAccess;
@@ -33,6 +34,7 @@ public final class ClientBridgeSetup {
 
     public static void onClientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
+            MenuScreens.register(BridgeMenus.EMBEDDED_ACCESSORIES.get(), UnifiedCuriosScreen.Embedded::new);
             replaceScreen(CuriosRegistry.CURIO_MENU.get(), UnifiedCuriosScreen.Legacy::new);
             replaceScreen(CuriosRegistry.CURIO_MENU_NEW.get(), UnifiedCuriosScreen.Revamp::new);
             CurioTrinketBridge.LOGGER.info("[CurioTrinketBridge] 已接管 Curios 原生 UI，使用内置统一饰品界面");

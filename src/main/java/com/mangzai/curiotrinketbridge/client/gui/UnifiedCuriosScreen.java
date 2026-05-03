@@ -1,6 +1,9 @@
 package com.mangzai.curiotrinketbridge.client.gui;
 
 import com.mangzai.curiotrinketbridge.bridge.TrinketSlotDiscovery;
+import com.mangzai.curiotrinketbridge.menu.EmbeddedAccessoriesMenu;
+import com.mangzai.curiotrinketbridge.network.BridgeNetwork;
+import com.mangzai.curiotrinketbridge.network.EmbeddedMenuActionPacket;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -40,10 +43,11 @@ import java.util.Optional;
  */
 public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends AbstractContainerScreen<T> {
 
-    private static final int PANEL_PADDING = 7;
     private static final int BUTTON_SIZE = 12;
+    private static final int ACCESSORIES_UPPER_PADDING = 8;
 
     private float legacyScroll;
+    private int legacyScrollIndex;
     private boolean legacyDragging;
     private final Map<String, Optional<ResourceLocation>> slotIconCache = new HashMap<>();
 
@@ -59,7 +63,7 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
     @Override
     protected void init() {
         super.init();
-        int panelWidth = this.curioBounds().widthWithPadding();
+        int panelWidth = this.curioBounds().isEmpty() ? 0 : this.accessoriesPanelWidth() + 6;
         int centered = (this.width - this.imageWidth + panelWidth) / 2;
         int minLeft = Math.min(panelWidth + 8, Math.max(8, this.width - this.imageWidth - 8));
         int maxLeft = Math.max(minLeft, this.width - this.imageWidth - 8);
@@ -158,12 +162,16 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
                 return true;
             }
 
+            if (this.menu instanceof EmbeddedAccessoriesMenu embedded && embedded.overMaxVisibleSlots) {
+                int nextIndex = Mth.clamp(embedded.scrolledIndex + (delta < 0 ? 1 : -1), 0, embedded.maxScrollableIndex());
+                this.scrollEmbeddedToIndex(embedded, nextIndex);
+                return true;
+            }
+
             if (this.menu instanceof CuriosContainer legacy && legacy.canScroll()) {
-                int visibleSlots = CuriosApi.getCuriosInventory(legacy.player)
-                        .map(handler -> handler.getVisibleSlots()).orElse(8);
-                int scrollSteps = Math.max(1, (int) Math.floor(visibleSlots / 8.0D));
-                this.legacyScroll = Mth.clamp((float) (this.legacyScroll - delta / scrollSteps), 0.0F, 1.0F);
-                legacy.scrollTo(this.legacyScroll);
+                int maxIndex = this.maxLegacyScrollIndex(legacy);
+                int nextIndex = Mth.clamp(this.legacyScrollIndex + (delta < 0 ? 1 : -1), 0, maxIndex);
+                this.scrollLegacyToIndex(legacy, nextIndex);
                 return true;
             }
         }
@@ -175,12 +183,12 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
         CurioBounds bounds = this.curioBounds();
         if (bounds.isEmpty()) return;
 
-        int panelX = this.leftPos + bounds.minX - PANEL_PADDING;
-        int panelY = this.topPos + bounds.minY - PANEL_PADDING - this.panelHeaderHeight();
-        int panelWidth = bounds.width() + PANEL_PADDING * 2;
-        int panelHeight = bounds.height() + PANEL_PADDING * 2 + this.panelHeaderHeight();
+        int panelX = this.accessoriesPanelX();
+        int panelY = this.topPos;
+        int panelWidth = this.accessoriesPanelWidth();
+        int panelHeight = this.accessoriesPanelHeight();
 
-        this.fillPanel(guiGraphics, panelX, panelY, panelWidth, panelHeight);
+        this.fillPanel(guiGraphics, panelX + 6, panelY, panelWidth, panelHeight);
 
         for (Slot slot : this.menu.slots) {
             if (!(slot instanceof CurioSlot curioSlot) || !slot.isActive()) continue;
@@ -324,11 +332,10 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
 
     private List<PanelButton> panelButtons() {
         List<PanelButton> buttons = new ArrayList<>();
-        CurioBounds bounds = this.curioBounds();
-        if (bounds.isEmpty()) return buttons;
+        if (this.curioBounds().isEmpty()) return buttons;
 
-        int x = this.leftPos + bounds.minX - PANEL_PADDING + 5;
-        int y = this.topPos + bounds.minY - PANEL_PADDING - this.panelHeaderHeight() + 5;
+        int x = this.accessoriesPanelX() + 11;
+        int y = this.topPos + 5;
 
         if (this.menu instanceof CuriosContainerV2 v2) {
             if (v2.totalPages > 1) {
@@ -343,6 +350,14 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
                 buttons.add(new PanelButton(x, y, "C", Component.translatable("tooltip.curio_trinkets_bridge.toggle_cosmetics"),
                         () -> NetworkHandler.INSTANCE.send(PacketDistributor.SERVER.noArg(), new CPacketToggleCosmetics(v2.containerId))));
             }
+        }
+
+        if (this.menu instanceof EmbeddedAccessoriesMenu embedded && embedded.hasCosmetics()) {
+            buttons.add(new PanelButton(x, y, "C", Component.translatable("tooltip.curio_trinkets_bridge.toggle_cosmetics"),
+                    () -> {
+                        embedded.toggleCosmetics();
+                        BridgeNetwork.CHANNEL.send(PacketDistributor.SERVER.noArg(), EmbeddedMenuActionPacket.toggleCosmetics(embedded.containerId));
+                    }));
         }
 
         return buttons;
@@ -377,61 +392,157 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
 
     private void renderScroll(GuiGraphics guiGraphics, int panelX, int panelY, int panelWidth, int panelHeight, CurioBounds bounds) {
         if (this.menu instanceof CuriosContainerV2 v2 && v2.totalPages > 1) {
-            int trackX = panelX + panelWidth - 8;
-            int trackY = panelY + PANEL_PADDING + this.panelHeaderHeight();
-            int trackHeight = Math.max(18, panelHeight - PANEL_PADDING * 2 - this.panelHeaderHeight());
+            int trackX = panelX + 13;
+            int trackY = panelY + 7 + ACCESSORIES_UPPER_PADDING;
+            int trackHeight = Math.max(18, panelHeight - 22);
             AccessoriesUiTextures.blitScrollTrack(guiGraphics, trackX, trackY, 8, trackHeight);
-            int handleHeight = Math.max(12, trackHeight / Math.max(1, v2.totalPages));
-            int maxOffset = Math.max(0, trackHeight - handleHeight);
+            int handleHeight = this.accessoriesScrollBarHeight();
+            int maxOffset = Math.max(0, panelHeight - 24 - handleHeight);
             int handleY = trackY + Math.round(maxOffset * (v2.currentPage / (float) Math.max(1, v2.totalPages - 1)));
-            AccessoriesUiTextures.blitScrollBar(guiGraphics, trackX + 1, handleY, 6, handleHeight);
-        } else if (this.menu instanceof CuriosContainer legacy && legacy.canScroll()) {
-            int trackX = panelX + panelWidth - 8;
-            int trackY = panelY + PANEL_PADDING + this.panelHeaderHeight();
-            int trackHeight = Math.max(18, bounds.height());
+            AccessoriesUiTextures.blitScrollBar(guiGraphics, panelX + 14, handleY, 6, handleHeight);
+        } else if (this.menu instanceof EmbeddedAccessoriesMenu embedded && embedded.overMaxVisibleSlots) {
+            int trackX = panelX + 13;
+            int trackY = panelY + 7 + ACCESSORIES_UPPER_PADDING;
+            int trackHeight = Math.max(18, panelHeight - 22);
             AccessoriesUiTextures.blitScrollTrack(guiGraphics, trackX, trackY, 8, trackHeight);
-            int handleHeight = Math.max(12, trackHeight / 2);
-            int handleY = trackY + Math.round((trackHeight - handleHeight) * this.legacyScroll);
-            AccessoriesUiTextures.blitScrollBar(guiGraphics, trackX + 1, handleY, 6, handleHeight);
+            int handleHeight = this.accessoriesScrollBarHeight();
+            int handleY = panelY + ACCESSORIES_UPPER_PADDING + 8 + Math.round(embedded.smoothScroll * Math.max(0, panelHeight - 24 - handleHeight));
+            AccessoriesUiTextures.blitScrollBar(guiGraphics, panelX + 14, handleY, 6, handleHeight);
+        } else if (this.menu instanceof CuriosContainer legacy && legacy.canScroll()) {
+            int trackX = panelX + 13;
+            int trackY = panelY + 7 + ACCESSORIES_UPPER_PADDING;
+            int trackHeight = Math.max(18, panelHeight - 22);
+            AccessoriesUiTextures.blitScrollTrack(guiGraphics, trackX, trackY, 8, trackHeight);
+            int handleHeight = this.accessoriesScrollBarHeight();
+            int handleY = panelY + ACCESSORIES_UPPER_PADDING + 8 + Math.round(this.legacyScroll * Math.max(0, panelHeight - 24 - handleHeight));
+            AccessoriesUiTextures.blitScrollBar(guiGraphics, panelX + 14, handleY, 6, handleHeight);
         }
     }
 
     private boolean isLegacyScrollBar(double mouseX, double mouseY) {
+        if (this.menu instanceof EmbeddedAccessoriesMenu embedded && embedded.overMaxVisibleSlots) {
+            CurioBounds bounds = this.curioBounds();
+            if (bounds.isEmpty()) return false;
+            int trackX = this.accessoriesPanelX() + 13;
+            int trackY = this.topPos + 7 + ACCESSORIES_UPPER_PADDING;
+            int trackHeight = Math.max(18, this.accessoriesPanelHeight() - 22);
+            return mouseX >= trackX && mouseY >= trackY && mouseX < trackX + 8 && mouseY < trackY + trackHeight;
+        }
         if (!(this.menu instanceof CuriosContainer legacy) || !legacy.canScroll()) return false;
         CurioBounds bounds = this.curioBounds();
         if (bounds.isEmpty()) return false;
-        int panelX = this.leftPos + bounds.minX - PANEL_PADDING;
-        int panelY = this.topPos + bounds.minY - PANEL_PADDING - this.panelHeaderHeight();
-        int panelWidth = bounds.width() + PANEL_PADDING * 2;
-        int trackX = panelX + panelWidth - 8;
-        int trackY = panelY + PANEL_PADDING + this.panelHeaderHeight();
-        int trackHeight = Math.max(18, bounds.height());
-        return mouseX >= trackX && mouseY >= trackY && mouseX < trackX + 6 && mouseY < trackY + trackHeight;
+        int trackX = this.accessoriesPanelX() + 13;
+        int trackY = this.topPos + 7 + ACCESSORIES_UPPER_PADDING;
+        int trackHeight = Math.max(18, this.accessoriesPanelHeight() - 22);
+        return mouseX >= trackX && mouseY >= trackY && mouseX < trackX + 8 && mouseY < trackY + trackHeight;
     }
 
     private void updateLegacyScroll(double mouseY) {
+        if (this.menu instanceof EmbeddedAccessoriesMenu embedded) {
+            CurioBounds bounds = this.curioBounds();
+            if (bounds.isEmpty()) return;
+            int patchYOffset = this.topPos + 7 + ACCESSORIES_UPPER_PADDING;
+            int panelHeight = this.accessoriesPanelHeight();
+            float smoothScroll = Mth.clamp((float) ((mouseY - patchYOffset) / Math.max(1.0D, panelHeight - 22.0D)), 0.0F, 1.0F);
+            int nextIndex = Math.round(smoothScroll * embedded.maxScrollableIndex());
+            this.scrollEmbeddedToIndex(embedded, nextIndex);
+            return;
+        }
         if (!(this.menu instanceof CuriosContainer legacy)) return;
         CurioBounds bounds = this.curioBounds();
         if (bounds.isEmpty()) return;
-        int panelY = this.topPos + bounds.minY - PANEL_PADDING - this.panelHeaderHeight();
-        int trackY = panelY + PANEL_PADDING + this.panelHeaderHeight();
-        int trackHeight = Math.max(18, bounds.height());
-        this.legacyScroll = Mth.clamp((float) ((mouseY - trackY) / Math.max(1.0D, trackHeight)), 0.0F, 1.0F);
-        legacy.scrollTo(this.legacyScroll);
+        int patchYOffset = this.topPos + 7 + ACCESSORIES_UPPER_PADDING;
+        int panelHeight = this.accessoriesPanelHeight();
+        float smoothScroll = Mth.clamp((float) ((mouseY - patchYOffset) / Math.max(1.0D, panelHeight - 22.0D)), 0.0F, 1.0F);
+        int nextIndex = Math.round(smoothScroll * this.maxLegacyScrollIndex(legacy));
+        this.scrollLegacyToIndex(legacy, nextIndex);
     }
 
     private boolean isInsideCurioPanel(double mouseX, double mouseY) {
         CurioBounds bounds = this.curioBounds();
         if (bounds.isEmpty()) return false;
-        int x = this.leftPos + bounds.minX - PANEL_PADDING;
-        int y = this.topPos + bounds.minY - PANEL_PADDING - this.panelHeaderHeight();
+        int x = this.accessoriesPanelX() + 6;
+        int y = this.topPos;
         return mouseX >= x && mouseY >= y
-                && mouseX < x + bounds.width() + PANEL_PADDING * 2
-                && mouseY < y + bounds.height() + PANEL_PADDING * 2 + this.panelHeaderHeight();
+                && mouseX < x + this.accessoriesPanelWidth()
+                && mouseY < y + this.accessoriesPanelHeight();
     }
 
-    private int panelHeaderHeight() {
-        return this.menu instanceof CuriosContainerV2 v2 && (v2.totalPages > 1 || v2.hasCosmetics) ? 18 : 4;
+    private void scrollLegacyToIndex(CuriosContainer legacy, int index) {
+        int maxIndex = this.maxLegacyScrollIndex(legacy);
+        int nextIndex = Mth.clamp(index, 0, maxIndex);
+        if (nextIndex == this.legacyScrollIndex) return;
+        this.legacyScrollIndex = nextIndex;
+        this.legacyScroll = maxIndex <= 0 ? 0.0F : this.legacyScrollIndex / (float) maxIndex;
+        legacy.scrollTo(this.legacyScroll);
+    }
+
+    private void scrollEmbeddedToIndex(EmbeddedAccessoriesMenu embedded, int index) {
+        int nextIndex = Mth.clamp(index, 0, embedded.maxScrollableIndex());
+        if (nextIndex == embedded.scrolledIndex) return;
+        embedded.scrollToIndex(nextIndex);
+        BridgeNetwork.CHANNEL.send(PacketDistributor.SERVER.noArg(), EmbeddedMenuActionPacket.scroll(embedded.containerId, nextIndex));
+    }
+
+    private int maxLegacyScrollIndex(CuriosContainer legacy) {
+        int visibleSlots = CuriosApi.getCuriosInventory(legacy.player)
+                .map(handler -> handler.getVisibleSlots()).orElse(8);
+        return Math.max(0, visibleSlots - 8);
+    }
+
+    private int accessoriesPanelHeight() {
+        return 14 + Math.min(this.totalCurioRows(), 8) * 18 + ACCESSORIES_UPPER_PADDING;
+    }
+
+    private int accessoriesPanelWidth() {
+        int width = 8 + 18 + 18;
+        if (this.hasVisibleCosmeticColumn()) width += 18 + 2;
+        if (!this.overMaxVisibleSlots()) width -= 12;
+        return width;
+    }
+
+    private int accessoriesPanelX() {
+        int x = this.leftPos - (this.hasVisibleCosmeticColumn() ? 72 : 52);
+        if (!this.overMaxVisibleSlots()) x += 12;
+        return x;
+    }
+
+    private int accessoriesScrollBarHeight() {
+        int height = Mth.lerpInt(Math.min(this.totalCurioRows() / 20.0F, 1.0F), 101, 31);
+        if (height % 2 == 0) height++;
+        return Math.min(height, Math.max(1, this.accessoriesPanelHeight() - 24));
+    }
+
+    private boolean hasVisibleCosmeticColumn() {
+        if (this.menu instanceof EmbeddedAccessoriesMenu embedded && embedded.isCosmeticsOpen()) return true;
+        if (this.menu instanceof CuriosContainer legacy && legacy.hasCosmeticColumn()) return true;
+        for (Slot slot : this.menu.slots) {
+            if (slot instanceof CosmeticCurioSlot || (slot instanceof CurioSlot curioSlot && curioSlot.isCosmetic())) return true;
+        }
+        return false;
+    }
+
+    private boolean overMaxVisibleSlots() {
+        if (this.menu instanceof EmbeddedAccessoriesMenu embedded) return embedded.overMaxVisibleSlots;
+        if (this.menu instanceof CuriosContainer legacy) return legacy.canScroll();
+        if (this.menu instanceof CuriosContainerV2 v2) return v2.totalPages > 1;
+        return this.totalCurioRows() > 8;
+    }
+
+    private int totalCurioRows() {
+        if (this.menu instanceof EmbeddedAccessoriesMenu embedded) return embedded.totalSlots;
+        if (this.menu instanceof CuriosContainer legacy) {
+            return CuriosApi.getCuriosInventory(legacy.player)
+                    .map(handler -> handler.getVisibleSlots()).orElse(0);
+        }
+
+        List<String> rows = new ArrayList<>();
+        for (Slot slot : this.menu.slots) {
+            if (!(slot instanceof CurioSlot curioSlot) || !slot.isActive()) continue;
+            String rowKey = curioSlot.getIdentifier() + ":" + slot.getSlotIndex();
+            if (!rows.contains(rowKey)) rows.add(rowKey);
+        }
+        return rows.size();
     }
 
     private CurioBounds curioBounds() {
@@ -471,9 +582,6 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
             return this.maxY - this.minY;
         }
 
-        int widthWithPadding() {
-            return this.isEmpty() ? 0 : this.width() + PANEL_PADDING * 2;
-        }
     }
 
     private record PanelButton(int x, int y, String label, Component tooltip, Runnable action) {
@@ -488,6 +596,12 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
 
     public static final class Legacy extends UnifiedCuriosScreen<CuriosContainer> {
         public Legacy(CuriosContainer menu, Inventory inventory, Component title) {
+            super(menu, inventory, title);
+        }
+    }
+
+    public static final class Embedded extends UnifiedCuriosScreen<EmbeddedAccessoriesMenu> {
+        public Embedded(EmbeddedAccessoriesMenu menu, Inventory inventory, Component title) {
             super(menu, inventory, title);
         }
     }
