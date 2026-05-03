@@ -40,8 +40,6 @@ import java.util.Optional;
  */
 public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends AbstractContainerScreen<T> {
 
-    private static final ResourceLocation INVENTORY_TEXTURE = ResourceLocation.withDefaultNamespace("textures/gui/container/inventory.png");
-    private static final ResourceLocation COSMETIC_ICON_TEXTURE = ResourceLocation.fromNamespaceAndPath("curios", "textures/slot/empty_cosmetic_slot.png");
     private static final int PANEL_PADDING = 7;
     private static final int BUTTON_SIZE = 12;
 
@@ -81,7 +79,7 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
 
     @Override
     protected void renderBg(@Nonnull GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
-        guiGraphics.blit(INVENTORY_TEXTURE, this.leftPos, this.topPos, 0, 0, this.imageWidth, this.imageHeight);
+        AccessoriesUiTextures.blitInventory(guiGraphics, this.leftPos, this.topPos, this.imageWidth, this.imageHeight);
 
         if (this.minecraft != null && this.minecraft.player != null) {
             InventoryScreen.renderEntityInInventoryFollowsMouse(guiGraphics,
@@ -188,8 +186,7 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
             if (!(slot instanceof CurioSlot curioSlot) || !slot.isActive()) continue;
             int x = this.leftPos + slot.x - 1;
             int y = this.topPos + slot.y - 1;
-            int outer = curioSlot instanceof CosmeticCurioSlot || curioSlot.isCosmetic() ? 0xFF8A6A96 : 0xFF7E8172;
-            this.drawAccessoriesSlotBack(guiGraphics, x, y, outer);
+            this.drawAccessoriesSlotBack(guiGraphics, x, y);
         }
 
         this.renderScroll(guiGraphics, panelX, panelY, panelWidth, panelHeight, bounds);
@@ -218,13 +215,9 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
             if (!slot.isActive() || !curioSlot.canToggleRender()) continue;
             int x = this.leftPos + slot.x + 11;
             int y = this.topPos + slot.y - 3;
-            boolean hovered = mouseX >= x && mouseY >= y && mouseX < x + 8 && mouseY < y + 8;
-            int color = curioSlot.getRenderStatus() ? 0xFF79B66B : 0xFF6B7078;
-            guiGraphics.fill(x, y, x + 8, y + 8, hovered ? 0xFFFFFFFF : 0xFF25272B);
-            guiGraphics.fill(x + 1, y + 1, x + 7, y + 7, color);
-            if (!curioSlot.getRenderStatus()) {
-                guiGraphics.fill(x + 2, y + 3, x + 6, y + 5, 0xFF24262B);
-            }
+            boolean hovered = mouseX >= x && mouseY >= y && mouseX < x + BUTTON_SIZE && mouseY < y + BUTTON_SIZE;
+            AccessoriesUiTextures.blitButton12(guiGraphics, x, y, hovered);
+            AccessoriesUiTextures.blitLineToggle(guiGraphics, x, y, curioSlot.getRenderStatus());
         }
     }
 
@@ -264,7 +257,7 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
 
     private Optional<ResourceLocation> resolveSlotIconTexture(CurioSlot curioSlot) {
         if (curioSlot instanceof CosmeticCurioSlot || curioSlot.isCosmetic()) {
-            return existingTexture(COSMETIC_ICON_TEXTURE);
+            return existingTexture(AccessoriesUiTextures.COSMETIC_SLOT_ICON);
         }
 
         TrinketSlotDiscovery.DiscoveredSlot trinketSlot = this.discoveredTrinketSlot(curioSlot.getIdentifier());
@@ -368,24 +361,18 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
             if (!slot.isActive() || !curioSlot.canToggleRender()) continue;
             int x = this.leftPos + slot.x + 11;
             int y = this.topPos + slot.y - 3;
-            if (mouseX >= x && mouseY >= y && mouseX < x + 8 && mouseY < y + 8) return curioSlot;
+            if (mouseX >= x && mouseY >= y && mouseX < x + BUTTON_SIZE && mouseY < y + BUTTON_SIZE) return curioSlot;
         }
         return null;
     }
 
     private void drawSmallButton(GuiGraphics guiGraphics, int x, int y, String label, boolean hovered) {
-        guiGraphics.fill(x, y, x + BUTTON_SIZE, y + BUTTON_SIZE, hovered ? 0xFFFFFFFF : 0xFF202226);
-        guiGraphics.fill(x + 1, y + 1, x + BUTTON_SIZE - 1, y + BUTTON_SIZE - 1, hovered ? 0xFF6D7568 : 0xFF4F564E);
+        AccessoriesUiTextures.blitButton12(guiGraphics, x, y, hovered);
         guiGraphics.drawCenteredString(this.font, label, x + BUTTON_SIZE / 2, y + 2, 0xFFE8E8E8);
     }
 
-    private void drawAccessoriesSlotBack(GuiGraphics guiGraphics, int x, int y, int accent) {
-        guiGraphics.fill(x, y, x + 18, y + 18, 0xFF14161A);
-        guiGraphics.fill(x + 1, y + 1, x + 17, y + 17, accent);
-        guiGraphics.fill(x + 2, y + 2, x + 16, y + 16, 0xFF2D3036);
-        guiGraphics.fill(x + 3, y + 3, x + 15, y + 15, 0xFF1D2025);
-        guiGraphics.fill(x + 3, y + 3, x + 15, y + 4, 0x663F444C);
-        guiGraphics.fill(x + 3, y + 14, x + 15, y + 15, 0xAA111317);
+    private void drawAccessoriesSlotBack(GuiGraphics guiGraphics, int x, int y) {
+        AccessoriesUiTextures.blitSlot(guiGraphics, x, y);
     }
 
     private void renderScroll(GuiGraphics guiGraphics, int panelX, int panelY, int panelWidth, int panelHeight, CurioBounds bounds) {
@@ -393,19 +380,19 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
             int trackX = panelX + panelWidth - 8;
             int trackY = panelY + PANEL_PADDING + this.panelHeaderHeight();
             int trackHeight = Math.max(18, panelHeight - PANEL_PADDING * 2 - this.panelHeaderHeight());
-            guiGraphics.fill(trackX, trackY, trackX + 4, trackY + trackHeight, 0xFF1E2024);
+            AccessoriesUiTextures.blitScrollTrack(guiGraphics, trackX, trackY, 8, trackHeight);
             int handleHeight = Math.max(12, trackHeight / Math.max(1, v2.totalPages));
             int maxOffset = Math.max(0, trackHeight - handleHeight);
             int handleY = trackY + Math.round(maxOffset * (v2.currentPage / (float) Math.max(1, v2.totalPages - 1)));
-            guiGraphics.fill(trackX, handleY, trackX + 4, handleY + handleHeight, 0xFF8A917F);
+            AccessoriesUiTextures.blitScrollBar(guiGraphics, trackX + 1, handleY, 6, handleHeight);
         } else if (this.menu instanceof CuriosContainer legacy && legacy.canScroll()) {
             int trackX = panelX + panelWidth - 8;
             int trackY = panelY + PANEL_PADDING + this.panelHeaderHeight();
             int trackHeight = Math.max(18, bounds.height());
-            guiGraphics.fill(trackX, trackY, trackX + 4, trackY + trackHeight, 0xFF1E2024);
+            AccessoriesUiTextures.blitScrollTrack(guiGraphics, trackX, trackY, 8, trackHeight);
             int handleHeight = Math.max(12, trackHeight / 2);
             int handleY = trackY + Math.round((trackHeight - handleHeight) * this.legacyScroll);
-            guiGraphics.fill(trackX, handleY, trackX + 4, handleY + handleHeight, 0xFF8A917F);
+            AccessoriesUiTextures.blitScrollBar(guiGraphics, trackX + 1, handleY, 6, handleHeight);
         }
     }
 
@@ -466,9 +453,7 @@ public class UnifiedCuriosScreen<T extends AbstractContainerMenu> extends Abstra
     }
 
     private void fillPanel(GuiGraphics guiGraphics, int x, int y, int width, int height) {
-        guiGraphics.fill(x, y, x + width, y + height, 0xFF111317);
-        guiGraphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, 0xFF555B53);
-        guiGraphics.fill(x + 3, y + 3, x + width - 3, y + height - 3, 0xFF24272D);
+        AccessoriesUiTextures.blitBackground(guiGraphics, x, y, width, height);
     }
 
     private record CurioBounds(int minX, int minY, int maxX, int maxY) {
